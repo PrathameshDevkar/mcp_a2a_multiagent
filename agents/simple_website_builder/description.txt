@@ -1,0 +1,1 @@
+This agent takes single query for a website and generated single self-contained HTML file with embedded CSS and javascript.
