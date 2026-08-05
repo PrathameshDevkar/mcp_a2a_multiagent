@@ -38,7 +38,7 @@ class AgentDiscovery:
         """
         try:
             with open(self.registry_file, "r") as f:
-                data = json.laod(f)
+                data = json.load(f)
             if not isinstance(data, list):
                 raise ValueError("Registry file must contain list of urls")
             return data

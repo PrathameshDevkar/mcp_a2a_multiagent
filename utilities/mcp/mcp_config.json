@@ -2,24 +2,20 @@
 {
     "mcpServers":
     {
-        "terminal_server":
-        {
-            "command": "C:/Users/Prathamesh/prathamesh/ai_agent/ai_agent_env/Scripts/python.exe",
-            "args": 
-            [
-                "--directory",
-                "C:/Users/Prathamesh/prathamesh/ai_agent/mcp_a2a_multiagent/servers",
-                "run",
-                "terminal_server.py"
-            ]
-        },
-
         "arithematic_server":
         {
             "command":"streamable_http",
             "args":
             [
-                "http://localhost:3000/mcp/"
+                "http://localhost:3000/mcp"
+            ]
+        },
+        
+        "terminal_server": {
+            "command": "C:/Users/Prathamesh/prathamesh/ai_agent/.venv/Scripts/python.exe",
+            "args": [
+            "-m",
+            "mcp_a2a_multiagent.servers.terminal_server"
             ]
         }
     }

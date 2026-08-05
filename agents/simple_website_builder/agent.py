@@ -9,13 +9,22 @@ import vertexai
 from vertexai.generative_models import GenerativeModel
 from collections.abc import AsyncIterable
 from google.genai import types
+from dotenv import load_dotenv
+from mcp_a2a_multiagent.utilities.logger import debug_log
+from mcp_a2a_multiagent.config import settings
 
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = r"C:\Users\Prathamesh\prathamesh\ai_agent\vertexai-free-credits-api-key.json"
 vertexai.init(project = "poised-cortex-462609-n4", location = "us-central1")
 
+load_dotenv()
 # model = GenerativeModel("gemini-2.5-flash")
-model = "gemini-2.5-flash"
+# model = "gemini-2.5-flash"
 
+# root_agent  = LlmAgent(
+#     model = model,
+#     name = "simple_website_builder",
+#     description = "You are a helpful assistant that answers to the users questions."
+# )
 instructions_file_path = r"C:\Users\Prathamesh\prathamesh\ai_agent\mcp_a2a_multiagent\agents\simple_website_builder\instructions.txt"
 descriptions_file_path = r"C:\Users\Prathamesh\prathamesh\ai_agent\mcp_a2a_multiagent\agents\simple_website_builder\description.txt"
 
@@ -41,62 +50,129 @@ class simpleWebsiteBuilder:
     def _build_agent(self) -> LlmAgent:
         return LlmAgent(
             name = "simple_website_builder",
-            model= model ,
+            model= settings.MODEL ,
             instruction = self.SYSTEM_INSTRUCTIONS,
             description = self.DESCRIPTIONS,
         )
     
-    async def invoke(self, query:str, session_id: str) -> AsyncIterable[dict]:
-        """
-        Invoke the agent
-        Return a stream of updates back to the caller as the agent processes the query
+    async def invoke(
+    self,
+    query: str,
+    session_id: str,
+    ) -> AsyncIterable[dict]:
 
-        {
-            'is_task_complete':bool, #Indicates if the task is complete
-            'updates': str, #Updates on the task progress
-            'content': str, #Final result if the task is complete
-        }
-        """
-
-        session= await self._runner.session_service.get_session(
-            app_name = self._agent.name,
-            session_id = session_id,
-            user_id = self._user_id
+        session = await self._runner.session_service.get_session(
+            app_name=self._agent.name,
+            session_id=session_id,
+            user_id=self._user_id,
         )
 
-        if not session:
-            session = self._runner.session_service.create_session(
-                app_name = self._agent.name,
-                session_id = session_id,
-                user_id = self._user_id
+        if session is None:
+            await self._runner.session_service.create_session(
+                app_name=self._agent.name,
+                session_id=session_id,
+                user_id=self._user_id,
             )
 
-        #the message to be send to adk has to be certian format and
-        # this will achieve by the google.genai "types".
-        user_content = types.content(
-            role = "user",
-            parts = [types.Part.from_text(text = query )]
+        user_content = types.Content(
+            role="user",
+            parts=[
+                types.Part.from_text(text = query)
+            ],
         )
 
-        #below is what will run the agent and get the streamed output
-        # to catch the streaming output use 'for'
-        async for event in self._runner.run_async(
-            user_id = self._user_id,
-            session_id = session_id,
-            new_message = user_content
-        ):
-            if event.is_final_response:
-                final_response=""
-                if event.content and event.content.parts and event.content.parts[-1].text:
-                    final_response = event.content.parts[-1].text
+        working_sent = False
 
-                    #this yield will return to the caller
-                    yield {
-                        "is_task_complete": True,
-                        "content": final_response
-                    }
-            else:
+        async for event in self._runner.run_async(
+            user_id=self._user_id,
+            session_id=session_id,
+            new_message=user_content,
+        ):
+
+            debug_log(
+                component="WEBSITE invoke()",
+                message=f"Event ID: {event.id} | Author: {event.author} | Final Response: {event.is_final_response()}",
+                obj=event
+            )
+
+            if event.is_final_response:
+
+                final_text = ""
+
+                if (
+                    event.content
+                    and event.content.parts
+                    and event.content.parts[-1].text
+                ):
+                    final_text = event.content.parts[-1].text
+
                 yield {
-                    "is_task_complete":False,
-                    "updates": "Agent is processing your task..." 
+                    "is_task_complete": True,
+                    "content": final_text,
                 }
+
+                return
+
+            if not working_sent:
+
+                working_sent = True
+
+                yield {
+                    "is_task_complete": False,
+                    "updates": "Generating website..."
+                }
+    # async def invoke(self, query:str, session_id: str) -> AsyncIterable[dict]:
+    #     """
+    #     Invoke the agent
+    #     Return a stream of updates back to the caller as the agent processes the query
+
+    #     {
+    #         'is_task_complete':bool, #Indicates if the task is complete
+    #         'updates': str, #Updates on the task progress
+    #         'content': str, #Final result if the task is complete
+    #     }
+    #     """
+
+    #     session= await self._runner.session_service.get_session(
+    #         app_name = self._agent.name,
+    #         session_id = session_id,
+    #         user_id = self._user_id
+    #     )
+
+    #     if not session:
+    #         session = await self._runner.session_service.create_session(
+    #             app_name = self._agent.name,
+    #             session_id = session_id,
+    #             user_id = self._user_id
+    #         )
+
+    #     #the message to be send to adk has to be certian format and
+    #     # this will achieve by the google.genai "types".
+    #     user_content =  types.Content(
+    #         role = "user",
+    #         parts = [types.Part.from_text(text = query )]
+    #     )
+
+    #     #below is what will run the agent and get the streamed output
+    #     # to catch the streaming output use 'for'
+    #     async for event in self._runner.run_async(
+    #         user_id = self._user_id,
+    #         session_id = session_id,
+    #         new_message = user_content
+    #     ):
+    #         if event.is_final_response:
+    #             final_response=""
+    #             if event.content and event.content.parts and event.content.parts[-1].text:
+    #                 final_response = event.content.parts[-1].text
+
+    #                 #this yield will return to the caller
+    #                 yield {
+    #                     "is_task_complete": True,
+    #                     "content": final_response
+    #                 }
+    #         else:
+    #             yield {
+    #                 "is_task_complete":False,
+    #                 "updates": "Agent is processing your task..." 
+    #             }
+

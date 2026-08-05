@@ -1,4 +1,4 @@
-#this can perforfm file I/O operations through the terminal
+ #this can perforfm file I/O operations through the terminal
 from mcp.server.fastmcp import FastMCP
 import os
 import subprocess

@@ -1,126 +1,207 @@
-# from  a2a.types import AgentCard, Task, SendMessageRequest
+"""
+as we are using teh RemoteA2AAgent of teh adk and it does the work of this agent_connect file we wont ne needing this file
+"""
 
-# import httpx
-# from typing import Any
+
+
+
+
+
+
+
+
+
+# from typing import Dict
+# from dataclasses import dataclass
+# import logging
 # import uuid
 
+# from a2a.client import ClientConfig
+# from a2a.types import (
+#     AgentCard,
+#     Message,
+#     Part,
+#     Role,
+#     SendMessageRequest
+#     ) 
+# from a2a.client import Client, ClientConfig, create_client
+
+# from mcp_a2a_multiagent.utilities.a2a.agent_discovery import AgentDiscovery
+
+
+# logger = logging.getLogger(__name__)
+
+# class AgentNotFoundError(Exception):
+#     """Raised when a requested remote agent is not available"""
+
+# @dataclass
+# class RemoteAgent:
+#     card: AgentCard
+#     client: Client
 
 # class AgentConnector:
 #     """
-#     Connects to remote A2A agent and provides a uniform method to delegate tasks.
+#     Responsible for managing connections to a2a agents.
 
-#      The host agent will orchastrate the tasks that it gets. Lists out all the available agents. Then get the agent cards and understand the agents skills.
-#      Then the host agent may decide to call one of the agent and that call from host to the agent is handled by the agent connector.
+#     Responsibilities:
+#     1. Discover available agents
+#     2. Create A2A clients
+#     3. Cache AgentCards
+#     4. Cache connected clients
+#     5. Provide a simple API for sending messages to remote agents
 #     """
-#     def __init__(self, agent_card: AgentCard):
-#         self.agent_card = agent_card
 
-#     async def send_task(self, message: str, session_id: str) -> Task:
+#     def __init__(self, registry_file: str | None = None, client_config: ClientConfig | None = None) -> None:
 #         """
-#         Send a task to the agent and return the Task object
+#         Initialize the connector
 
-#         Args:
-#             message (str): The message to send to the agent
-#             session_id (str): The session ID for tracking the task
+#         Parameters:
+#             resgistry_file :str = path to the agent_registry.json file
+#             client_ocnfig: ClientConfig = Optional A2A Client configuration. If None, the sdk default configuration will be used
+#         """
+
+#         self.discovery = AgentDiscovery(registry_file)
+#         self.client_config = client_config or ClientConfig()
+#         self.agents : Dict[str, RemoteAgent] = {}
+
+#     async def initialize(self) -> None:
+#         """
+#         Initialize the connector.
         
-#         returns:
-#             Task: The Task object containing the response from the agent
+#         This method performs all asynchronous initialization. Must be called before using the connector
+#         """
+#         await self._load_all_agents()
+
+#     async def _load_all_agents(self) -> None:
+#         """
+#         Discover every registered agent and create a reusable A2A client for each one.
+#         This methos is called only once during the initialize().
 #         """
 
-#         async with httpx.AsyncClient(timeout = 300.0) as httpx_client:
-#             a2a_client = A2AClient(
-#                 httpx_client = httpx_client,
-#                 agent_card = self.agent_card
+#         logger.info("Discovering remote A2A agents")
+
+#         try:
+#             agent_cards = await self.discovery.list_agent_cards()
+#             logger.info(
+#                 "Discovered %d agent(s)",
+#                 len(agent_cards)
 #             )
 
-#             send_message_payload: dict[str, Any] = {
-#                 'message': {
-#                     'role': 'user',
-#                     'parts':[
+#             for card in agent_cards:
+#                 try: 
+#                     client = await create_client(
+#                         agent = card,
+#                         client_config = self.client_config
+#                     )
+
+#                     self.agents[card.name] = RemoteAgent(card = card, client = client)
+
+#                     logger.info(
+#                         "Connected to agent: %s",
+#                         card.name
+#                     )
+                
+#                 except Exception as e:
+#                     logger.exception(
+#                         "Failed to connect to agent '%s': %s",
+#                         card.name,
+#                         str(e)
+#                     )
+        
+#         except Exception as e:
+#             logger.exception(
+#                 "Agent discovery failed: %s",
+#                 str(e)
+#             )
+
+#     def list_agents(self) -> list[dict]:
+#         """
+#         Return lightweight summary of every discovered agent.
+
+#         This method intentionally hides the underlying AgentCard and client implementations.
+#         """
+
+#         agents = []
+
+#         for remote_agent in self.agents.values():
+#             card = remote_agent.card
+
+#             agents.append(
+#                 {
+#                     "name": card.name,
+#                     "description":card.description,
+#                     "version":card.version,
+#                     "skill":[
 #                         {
-#                             'text': message,
-#                             'kind': 'text'
+#                             "id": skill.id,
+#                             "name":skill.name,
+#                             "description":skill.description,
+#                             "examples":list(skill.examples)
 #                         }
+#                         for skill in card.skills
 #                     ]
 #                 }
-#             }
 
+#             )
+        
+#         return agents
+    
+#     def get_agent(self, agent_name:str) -> RemoteAgent:
+#         """
+#         Returns the cacehd A2A client for the remote agent.
 
+#         Parameters:
+#             agent_name: Name of the remote agent
+        
+#         returns:
+#             RemoteAgent: remote agent class object containing agent card and client
 
-import uuid
-from typing import AsyncGenerator, Optional
+#         raises AgentNotFoundError if the requested agent does not exist
 
-import grpc
-import httpx
+#         """
 
-from a2a.client import A2ACardResolver, ClientConfig, create_client
-from a2a.helpers import get_artifact_text, get_message_text
-from a2a.types import (
-    AgentCard,
-    Message,
-    Part,
-    Role,
-    SendMessageRequest,
-    StreamResponse,
-)
+#         remote_agent = self.agents.get(agent_name)
 
+#         if remote_agent is None:
+#             available = ", ".join(sorted(self.agents.keys()))
 
-class AgentConnector:
-    """Connector class to interact with an A2A Agent server (v1.0 SDK compliant)."""
+#             raise AgentNotFoundError(
+#                 f"Remote agent {agent_name} not found.\n"
+#                 f"Available agents are: {available}"
+#             )
+        
+#         return remote_agent
 
-    def __init__(self, agent_url: str, transport: Optional[str] = None) -> None:
-        """
-        :param agent_url: Base URL of the agent (e.g., 'http://127.0.0.1:41241')
-        :param transport: Transport protocol, e.g., 'JSONRPC', 'HTTP+JSON', or 'GRPC'
-        """
-        self.agent_url = agent_url
-        self.transport = transport
-        self.card: Optional[AgentCard] = None
-        self.client = None
+#     async def send_message(
+#         self,
+#         agent_name: str,
+#         message: str,
+#         task_id: str | None,
+#         context_id: str | None
+#     ):
+#         """
+#         Send message to the remote agent.
 
-    async def connect(self) -> None:
-        """Resolves the AgentCard and initializes the A2A Client connection."""
-        config = ClientConfig(
-            grpc_channel_factory=grpc.aio.insecure_channel,
-        )
-        if self.transport:
-            config.supported_protocol_bindings = [self.transport]
+#         This method is implemented as an async generator, 
+#         allowing caller to stream teh output as it arrives.
+#         """
 
-        # 1. Resolve Agent Card from host
-        async with httpx.AsyncClient() as httpx_client:
-            resolver = A2ACardResolver(httpx_client, self.agent_url)
-            self.card = await resolver.get_agent_card()
+#         remote_agent = self.get_agent(agent_name)
+#         client = remote_agent.client
 
-        # 2. Instantiate v1.0 Client via factory helper
-        self.client = await create_client(self.card, client_config=config)
+#         request = SendMessageRequest(
+#             message = Message(
+#                 role = Role.ROLE_USER,
+#                 message_id = str(uuid.uuid4()),
+#                 parts = [
+#                     Part(text = message)
+#                 ],
+#                 task_id = task_id,
+#                 context_id = context_id or str(uuid.uuid4())
+#             )
+#         )
 
-    async def send_message(
-        self,
-        text: str,
-        task_id: Optional[str] = None,
-        context_id: Optional[str] = None,
-    ) -> AsyncGenerator[StreamResponse, None]:
-        """Sends a message to the agent and yields raw StreamResponse objects."""
-        if not self.client:
-            raise RuntimeError("Connector is not connected. Call `connect()` first.")
+#         stream = client.send_message(request)
 
-        # Construct Protobuf Message using v1.0 conventions
-        message = Message(
-            role=Role.ROLE_USER,  # Enum uses SCREAMING_SNAKE_CASE
-            message_id=str(uuid.uuid4()),
-            parts=[Part(text=text)],  # Direct construction without intermediate wrappers
-            task_id=task_id,
-            context_id=context_id or str(uuid.uuid4()),
-        )
-
-        request = SendMessageRequest(message=message)
-
-        # send_message returns AsyncIterator[StreamResponse] in v1.0
-        async for chunk in self.client.send_message(request):
-            yield chunk
-
-    async def close(self) -> None:
-        """Closes the active client session."""
-        if self.client:
-            await self.client.close()
-            self.client = None
+#         async for event in stream:
+#             yield event

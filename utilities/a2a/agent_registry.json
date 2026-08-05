@@ -1,3 +1,9 @@
-[
-    "http://localhost:3001"
-]
+{
+    "agents": [
+        {
+            "name": "simple_website_builder",
+            "agent_card": "http://localhost:3001"
+        }
+
+    ]
+}

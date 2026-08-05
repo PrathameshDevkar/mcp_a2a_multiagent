@@ -67,7 +67,7 @@ def main(host:str, port:int):
 
     routes=[]
     routes.extend(create_agent_card_routes(agent_card))
-    routes.extend(create_jsonrpc_routes(request_handler, rpc_url = "/api/jsonrpc/")) # this actually builds the api route for the fastapi to use.
+    routes.extend(create_jsonrpc_routes(request_handler, rpc_url = "/a2a/jsonrpc/")) # this actually builds the api route for the fastapi to use.
     
     app = FastAPI(routes = routes)
 

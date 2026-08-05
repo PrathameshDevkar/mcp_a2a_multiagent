@@ -1,9 +1,15 @@
-from mcp_a2a_multiagent.utilities.mcp_discovery import MCPDiscovery
+from __future__ import annotations
+
+import logging
+
+from mcp_a2a_multiagent.utilities.mcp.mcp_discovery import MCPDiscovery
 from google.adk.tools.mcp_tool import MCPToolset
 from google.adk.tools.mcp_tool import StdioConnectionParams
 from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPServerParams
 
 from mcp import StdioServerParameters
+
+logger = logging.getLogger(__name__)
 
 class MCPConnector:
     """
@@ -15,15 +21,24 @@ class MCPConnector:
 
     def __init__(self, config_file: str = None):
         self.discovery = MCPDiscovery(config_file)
-        self.tools: list[MCPToolset] = []
+        self._toolsets: list[MCPToolset] = []
+        self._initialized = False
 
-    async def initialize(self):
-        await self._load_all_tools()
+    async def get_toolsets(self)-> list[MCPToolset]:
+        """
+        Returns all MCPToolsets.
 
-    async def _load_all_tools(self):
-        "list all the tools of the mcp server"
-        try:
-            for name, server in self.discovery.list_servers():
+        MCPToolset creted only once.
+        """
+
+        if not self._initialized:
+            await self._load_all_toolsets()
+
+        return self._toolsets
+
+    async def _load_all_toolsets(self) -> None:
+        for name, server in self.discovery.list_servers().items():
+            try:
                 if server.get("command")== "streamable_http":
                     conn = StreamableHTTPServerParams(url = server["args"][0])
                 
@@ -39,12 +54,21 @@ class MCPConnector:
                 toolset = MCPToolset(connection_params = conn)
                 tools = await toolset.get_tools()
 
-                tool_names = [tool.name for tool in tools]
-                print("========tools are======", tool_names)
+                logger.info(
+                    "Discovered %d tools from '%s': %s ",
+                    len(tools),
+                    name,
+                    [tool.name for tool in tools]
+                )
 
-                self.tools.append(toolset)
-        except Exception as e:
-            print(f"error while connecting to the mcp server: {str(e)}")
+                self._toolsets.append(toolset)
+            
+            except Exception:
+                logger.exception(
+                    "Failed to initilaize the MCP server: '%s'",
+                    name
+                )
+        self._initialized=True
 
 
 """
